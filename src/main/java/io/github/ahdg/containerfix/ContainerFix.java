@@ -5,7 +5,7 @@ import io.github.ahdg.containerfix.conf.ConfManager;
 import org.slf4j.Logger;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.block.BlockSnapshot;
-import org.spongepowered.api.block.BlockState;
+import org.spongepowered.api.block.BlockType;
 import org.spongepowered.api.command.CommandResult;
 import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.command.args.CommandContext;
@@ -24,10 +24,13 @@ import org.spongepowered.api.event.item.inventory.InteractInventoryEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.format.TextColors;
+import org.spongepowered.api.world.Location;
+import org.spongepowered.api.world.World;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Plugin(
         id = "containerfix",
@@ -55,10 +58,9 @@ public class ContainerFix {
         logger.info("已加载 ContainerFix，配置文件可在 /config/containerfix.conf 找到");
     }
 
-    public Map<BlockState, Player> activeGUI = new HashMap<>();
+    public Map<BlockSnapshot, Player> activeGUI = new HashMap<>();
 
     public class Reload implements CommandExecutor {
-
         @Override
         public CommandResult execute(CommandSource src, CommandContext args) {
             config.reload();
@@ -70,22 +72,21 @@ public class ContainerFix {
     @Listener(order = Order.LAST)
     public void onOpenGUI(InteractBlockEvent.Secondary event, @First Player player) {
         if (player.hasPermission("containerfix.ignore")) return;
-        BlockState blockState = event.getTargetBlock().getState();
-        String blockName = blockState.getType().getName();
-        // debug
-        if (player.hasPermission("containerfix.debug")) player.sendMessage(Text.of(blockState.getType().getName()));
-        if (Arrays.asList(config.get().AntiMultiOpenContainerList).contains(blockName) && activeGUI.containsKey(blockState)) {
+        BlockSnapshot blockSnapshot = event.getTargetBlock();
+        String blockName = blockSnapshot.getState().getType().getName();
+        if (!Arrays.asList(config.get().AntiGUIKeepContainerList).contains(blockName)
+                && !Arrays.asList(config.get().AntiMultiOpenContainerList).contains(blockName)) return;
+        if (Arrays.asList(config.get().AntiMultiOpenContainerList).contains(blockName) && activeGUI.containsKey(blockSnapshot)) {
             event.setCancelled(true);
             player.sendMessage(Text.builder(config.get().MessagesMultiOpen).color(TextColors.AQUA).build());
-        } else if (Arrays.asList(config.get().AntiGUIKeepContainerList).contains(blockName)) {
-            activeGUI.put(blockState, player);
         }
+        activeGUI.put(blockSnapshot, player);
     }
 
     @Listener(order = Order.LAST)
     public void onCloseGUI(InteractInventoryEvent.Close event, @First Player player) {
         if (activeGUI.isEmpty()) return;
-        for (BlockState block : activeGUI.keySet()) {
+        for (BlockSnapshot block : activeGUI.keySet()) {
             if (activeGUI.get(block) == player) {
                 activeGUI.remove(block);
             }
@@ -95,20 +96,20 @@ public class ContainerFix {
     @Listener(order = Order.LAST)
     public void onBlockBreak(ChangeBlockEvent.Break event, @Root Player player) {
         if (player.hasPermission("containerfix.ignore") || activeGUI.isEmpty()) return;
-        if (!config.get().PreventBreak) {
-            for (Transaction<BlockSnapshot> blockSnap : event.getTransactions()) {
-                final BlockState block = blockSnap.getFinal().getState();
-                final Player target = activeGUI.get(block);
-                if (target != null) {
-                    target.closeInventory();
-                    activeGUI.remove(block);
+        for (Transaction<BlockSnapshot> blockSnap : event.getTransactions()) {
+            final Optional<Location<World>> location = blockSnap.getFinal().getLocation();
+            final BlockType block = blockSnap.getFinal().getState().getType();
+            for (BlockSnapshot activeBlockSnap : activeGUI.keySet()) {
+                if (activeBlockSnap.getLocation() == location && activeBlockSnap.getState().getType() == block) {
+                    if (!config.get().PreventBreak) {
+                        activeGUI.get(activeBlockSnap).closeInventory();
+                        activeGUI.remove(activeBlockSnap);
+                    } else {
+                        event.setCancelled(true);
+                        player.sendMessage(Text.builder(config.get().MessagesAntiGUIKeep).color(TextColors.AQUA).build());
+                    }
                 }
             }
-        }
-        if (event.getTransactions().stream()
-                .anyMatch(t -> activeGUI.containsKey(t.getFinal().getState()))) {
-            event.setCancelled(true);
-            player.sendMessage(Text.builder(config.get().MessagesAntiGUIKeep).color(TextColors.AQUA).build());
         }
     }
 }
