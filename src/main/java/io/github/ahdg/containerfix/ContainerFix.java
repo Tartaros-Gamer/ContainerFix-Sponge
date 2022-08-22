@@ -17,6 +17,7 @@ import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.Order;
 import org.spongepowered.api.event.block.ChangeBlockEvent;
 import org.spongepowered.api.event.block.InteractBlockEvent;
+import org.spongepowered.api.event.cause.EventContextKeys;
 import org.spongepowered.api.event.filter.cause.First;
 import org.spongepowered.api.event.filter.cause.Root;
 import org.spongepowered.api.event.game.state.GameStartedServerEvent;
@@ -27,10 +28,7 @@ import org.spongepowered.api.text.format.TextColors;
 import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @Plugin(
         id = "containerfix",
@@ -58,52 +56,65 @@ public class ContainerFix {
         logger.info("已加载 ContainerFix，配置文件可在 /config/containerfix.conf 找到");
     }
 
-    public Map<BlockSnapshot, Player> activeGUI = new HashMap<>();
+    public Map<BlockSnapshot, UUID> activeGUI = new HashMap<>();
 
     public class Reload implements CommandExecutor {
         @Override
         public CommandResult execute(CommandSource src, CommandContext args) {
-            config.reload();
-            src.sendMessage(Text.of("已重载 ContainerFix 配置文件!"));
-            return CommandResult.success();
+                config.reload();
+                src.sendMessage(Text.of("已重载 ContainerFix 配置文件!"));
+                return CommandResult.success();
         }
     }
 
-    @Listener(order = Order.LAST)
-    public void onOpenGUI(InteractBlockEvent.Secondary event, @First Player player) {
+    @Listener(order = Order.DEFAULT)
+    public void onInvOpen(InteractInventoryEvent.Open event, @Root Player player) {
         if (player.hasPermission("containerfix.ignore")) return;
-        BlockSnapshot blockSnapshot = event.getTargetBlock();
-        String blockName = blockSnapshot.getState().getType().getName();
-        if (!Arrays.asList(config.get().AntiGUIKeepContainerList).contains(blockName)
-                && !Arrays.asList(config.get().AntiMultiOpenContainerList).contains(blockName)) return;
-        if (Arrays.asList(config.get().AntiMultiOpenContainerList).contains(blockName) && activeGUI.containsKey(blockSnapshot)) {
-            event.setCancelled(true);
-            player.sendMessage(Text.builder(config.get().MessagesMultiOpen).color(TextColors.AQUA).build());
-        }
-        activeGUI.put(blockSnapshot, player);
+        event.getContext().get(EventContextKeys.BLOCK_HIT).ifPresent(blockSnapshot -> {
+            if (!blockSnapshot.getLocation().isPresent()) return;
+            String blockName = blockSnapshot.getState().getType().getName();
+            if (Arrays.asList(config.get().AntiGUIKeepContainerList).contains(blockName)
+                    || Arrays.asList(config.get().AntiMultiOpenContainerList).contains(blockName)) {
+                activeGUI.put(blockSnapshot, player.getUniqueId());
+            }
+        });
     }
-
     @Listener(order = Order.LAST)
-    public void onCloseGUI(InteractInventoryEvent.Close event, @First Player player) {
-        if (activeGUI.isEmpty()) return;
-        for (BlockSnapshot block : activeGUI.keySet()) {
-            if (activeGUI.get(block) == player) {
-                activeGUI.remove(block);
+    public void onClickTarget(InteractBlockEvent.Secondary event, @First Player player) {
+        if (player.hasPermission("containerfix.ignore") || activeGUI.isEmpty()) return;
+        BlockSnapshot block = event.getTargetBlock();
+        final String blockName = block.getState().getName();
+        final Location<World> location = block.getLocation().get();
+        final BlockType blockType = block.getState().getType();
+        if (!Arrays.asList(config.get().AntiMultiOpenContainerList).contains(blockName)) return;
+        for (BlockSnapshot blockSnapshot : activeGUI.keySet()) {
+            if (blockSnapshot.getLocation().get().equals(location) && blockSnapshot.getState().getType().equals(blockType)) {
+                event.setCancelled(true);
+                player.sendMessage(Text.builder(config.get().MessagesMultiOpen).color(TextColors.AQUA).build());
             }
         }
+    }
+
+    @Listener(order = Order.BEFORE_POST)
+    public void onInvClose(InteractInventoryEvent.Close event, @Root Player player) {
+        if (activeGUI.isEmpty()) return;
+        activeGUI.keySet().removeIf(blockSnapshot -> activeGUI.get(blockSnapshot) == (player.getUniqueId()));
     }
 
     @Listener(order = Order.LAST)
     public void onBlockBreak(ChangeBlockEvent.Break event, @Root Player player) {
         if (player.hasPermission("containerfix.ignore") || activeGUI.isEmpty()) return;
         for (Transaction<BlockSnapshot> blockSnap : event.getTransactions()) {
-            final Optional<Location<World>> location = blockSnap.getFinal().getLocation();
-            final BlockType block = blockSnap.getFinal().getState().getType();
-            for (BlockSnapshot activeBlockSnap : activeGUI.keySet()) {
-                if (activeBlockSnap.getLocation() == location && activeBlockSnap.getState().getType() == block) {
+            if (!blockSnap.getFinal().getLocation().isPresent()) continue;
+            final Location<World> location = blockSnap.getOriginal().getLocation().get();
+            final BlockType block = blockSnap.getOriginal().getState().getType();
+            Iterator<BlockSnapshot> iter = activeGUI.keySet().iterator();
+            while (iter.hasNext()) {
+                final BlockSnapshot activeBlock = iter.next();
+                if (activeBlock.getLocation().get().equals(location) && activeBlock.getState().getType().equals(block)) {
                     if (!config.get().PreventBreak) {
-                        activeGUI.get(activeBlockSnap).closeInventory();
-                        activeGUI.remove(activeBlockSnap);
+                        Sponge.getServer().getPlayer(activeGUI.get(activeBlock)).ifPresent(Player::closeInventory);
+                        iter.remove();
                     } else {
                         event.setCancelled(true);
                         player.sendMessage(Text.builder(config.get().MessagesAntiGUIKeep).color(TextColors.AQUA).build());
