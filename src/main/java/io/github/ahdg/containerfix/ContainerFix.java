@@ -1,15 +1,13 @@
 package io.github.ahdg.containerfix;
 
 import com.google.inject.Inject;
+import io.github.ahdg.containerfix.commands.ReloadExecutor;
+import io.github.ahdg.containerfix.commands.ShowCacheExecutor;
 import io.github.ahdg.containerfix.conf.ConfManager;
 import org.slf4j.Logger;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.block.BlockSnapshot;
 import org.spongepowered.api.block.BlockType;
-import org.spongepowered.api.command.CommandResult;
-import org.spongepowered.api.command.CommandSource;
-import org.spongepowered.api.command.args.CommandContext;
-import org.spongepowered.api.command.spec.CommandExecutor;
 import org.spongepowered.api.command.spec.CommandSpec;
 import org.spongepowered.api.data.Transaction;
 import org.spongepowered.api.entity.living.player.Player;
@@ -44,27 +42,39 @@ public class ContainerFix {
     @Inject private Logger logger;
     @Inject private ConfManager config;
 
-
     @Listener
     public void onServerStart(GameStartedServerEvent event) {
-        CommandSpec reload = CommandSpec.builder()
-                .description(Text.of("重载 ContainerFix 的配置文件"))
-                .permission("containerfix.reload")
-                .executor(new Reload())
-                .build();
-        Sponge.getCommandManager().register(this, reload, "containerfix", "ctf");
+        initCommands();
+        config.get();
         logger.info("已加载 ContainerFix，配置文件可在 /config/containerfix.conf 找到");
     }
 
-    public Map<BlockSnapshot, UUID> activeGUI = new HashMap<>();
+    private void initCommands() {
+        CommandSpec reload = CommandSpec.builder()
+                .permission("containerfix.reload")
+                .description(Text.of("Reload Config."))
+                .executor(new ReloadExecutor())
+                .build();
 
-    public class Reload implements CommandExecutor {
-        @Override
-        public CommandResult execute(CommandSource src, CommandContext args) {
-                config.reload();
-                src.sendMessage(Text.of("已重载 ContainerFix 配置文件!"));
-                return CommandResult.success();
-        }
+        CommandSpec listGUI = CommandSpec.builder()
+                .permission("containerfix.show")
+                .description(Text.of("Show cached GUI."))
+                .executor(new ShowCacheExecutor())
+                .build();
+
+        CommandSpec core = CommandSpec.builder()
+                .description(Text.of("The basic command of ContainerFix."))
+                .child(reload, "reload", "load")
+                .child(listGUI, "show", "s", "list")
+                .build();
+
+        Sponge.getCommandManager().register(this, core, "containerfix", "ctf");
+    }
+
+    private final Map<BlockSnapshot, UUID> activeGUI = new HashMap<>();
+
+    public Map<BlockSnapshot, UUID> getActiveGUI() {
+        return activeGUI;
     }
 
     @Listener(order = Order.DEFAULT)
@@ -98,7 +108,7 @@ public class ContainerFix {
     @Listener(order = Order.BEFORE_POST)
     public void onInvClose(InteractInventoryEvent.Close event, @Root Player player) {
         if (activeGUI.isEmpty()) return;
-        activeGUI.keySet().removeIf(blockSnapshot -> activeGUI.get(blockSnapshot) == (player.getUniqueId()));
+        activeGUI.values().removeIf(playerUID -> playerUID == player.getUniqueId());
     }
 
     @Listener(order = Order.LAST)
@@ -110,7 +120,7 @@ public class ContainerFix {
             final BlockType block = blockSnap.getOriginal().getState().getType();
             Iterator<BlockSnapshot> iter = activeGUI.keySet().iterator();
             while (iter.hasNext()) {
-                final BlockSnapshot activeBlock = iter.next();
+                BlockSnapshot activeBlock = iter.next();
                 if (activeBlock.getLocation().get().equals(location) && activeBlock.getState().getType().equals(block)) {
                     if (!config.get().PreventBreak) {
                         Sponge.getServer().getPlayer(activeGUI.get(activeBlock)).ifPresent(Player::closeInventory);
