@@ -17,8 +17,11 @@ import java.util.Map;
 import java.util.UUID;
 
 public class ShowCacheExecutor implements CommandExecutor {
-    @Inject
+
     private ContainerFix plugin;
+    public ShowCacheExecutor(ContainerFix instance) {
+        plugin = instance;
+    }
 
     @Override
     public CommandResult execute(CommandSource src, CommandContext args) {

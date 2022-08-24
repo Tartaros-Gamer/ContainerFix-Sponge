@@ -38,12 +38,15 @@ import java.util.*;
 )
 public class ContainerFix {
 
+    private static ContainerFix instance;
 
     @Inject private Logger logger;
-    @Inject private ConfManager config;
+    @Inject
+    public ConfManager config;
 
     @Listener
     public void onServerStart(GameStartedServerEvent event) {
+        instance = this;
         initCommands();
         config.get();
         logger.info("已加载 ContainerFix，配置文件可在 /config/containerfix.conf 找到");
@@ -53,13 +56,13 @@ public class ContainerFix {
         CommandSpec reload = CommandSpec.builder()
                 .permission("containerfix.reload")
                 .description(Text.of("Reload Config."))
-                .executor(new ReloadExecutor())
+                .executor(new ReloadExecutor(instance))
                 .build();
 
         CommandSpec listGUI = CommandSpec.builder()
                 .permission("containerfix.show")
                 .description(Text.of("Show cached GUI."))
-                .executor(new ShowCacheExecutor())
+                .executor(new ShowCacheExecutor(instance))
                 .build();
 
         CommandSpec core = CommandSpec.builder()
@@ -68,7 +71,7 @@ public class ContainerFix {
                 .child(listGUI, "show", "s", "list")
                 .build();
 
-        Sponge.getCommandManager().register(this, core, "containerfix", "ctf");
+        Sponge.getCommandManager().register(instance, core, "containerfix", "ctf");
     }
 
     private final Map<BlockSnapshot, UUID> activeGUI = new HashMap<>();
