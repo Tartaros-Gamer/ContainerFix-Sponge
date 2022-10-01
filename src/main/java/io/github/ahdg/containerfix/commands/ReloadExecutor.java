@@ -9,7 +9,7 @@ import org.spongepowered.api.text.Text;
 
 public class ReloadExecutor implements CommandExecutor {
 
-    private ContainerFix plugin;
+    private final ContainerFix plugin;
     public ReloadExecutor(ContainerFix instance) {
         plugin = instance;
     }
@@ -17,7 +17,7 @@ public class ReloadExecutor implements CommandExecutor {
     @Override
     public CommandResult execute(CommandSource src, CommandContext args) {
         try {
-            plugin.config.reload();
+            plugin.getConfig().reload();
         } catch (Exception e) {
             e.printStackTrace();
         }

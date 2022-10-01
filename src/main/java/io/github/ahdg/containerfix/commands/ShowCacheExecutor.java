@@ -18,7 +18,7 @@ import java.util.UUID;
 
 public class ShowCacheExecutor implements CommandExecutor {
 
-    private ContainerFix plugin;
+    private final ContainerFix plugin;
     public ShowCacheExecutor(ContainerFix instance) {
         plugin = instance;
     }

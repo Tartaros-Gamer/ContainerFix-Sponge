@@ -11,8 +11,8 @@ public class Conf {
     " \\\"minecraft:chest\\\" # 箱子(Chest)\n" +
     " \\\"minecraft:stone:3\" # 闪长岩(1.12)")
     public String[] AntiGUIKeepContainerList = {
-            "minecraft:chest",
-            "minecraft:stone:3"
+            "roots:fey_crafter",
+            "bonsaitrees:bonsaipot"
     };
 
     @Setting(comment = "The block that will be targeted when prevent multi-players from opening.\n"
@@ -20,13 +20,14 @@ public class Conf {
             " \\\"minecraft:chest\\\" # 箱子(Chest)\n" +
             " \\\"minecraft:stone:3\" # 闪长岩(1.12)")
     public String[] AntiMultiOpenContainerList = {
-            "minecraft:chest",
-            "minecraft:stone:3"
+            "conarm:armorforge",
+            "conarm:armorstation",
+            "tconstruct:toolforge"
     };
 
     @Setting(comment = "Set If Prevent block from breaking when target block was occupied.\n"
             + "在容器被打开时，破坏方块的行为，true 代表阻止方块破坏，false 代表强行关闭 GUI")
-    public boolean PreventBreak = true;
+    public boolean PreventBreak = false;
 
     @Setting(comment = "The message send to player who open a occupied block.\n"
             + "容器多开时，向玩家发送的信息")

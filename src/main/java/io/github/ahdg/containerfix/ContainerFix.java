@@ -4,6 +4,8 @@ import com.google.inject.Inject;
 import io.github.ahdg.containerfix.commands.ReloadExecutor;
 import io.github.ahdg.containerfix.commands.ShowCacheExecutor;
 import io.github.ahdg.containerfix.conf.ConfManager;
+import io.github.ahdg.containerfix.mods.ThermalExpansion;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.block.BlockSnapshot;
@@ -40,15 +42,18 @@ public class ContainerFix {
 
     private static ContainerFix instance;
 
-    @Inject private Logger logger;
-    @Inject
-    public ConfManager config;
+    @Getter @Inject private Logger logger;
+    @Getter @Inject private ConfManager config;
 
     @Listener
     public void onServerStart(GameStartedServerEvent event) {
         instance = this;
         initCommands();
         config.get();
+        try {
+            Class.forName("cofh.thermalexpansion.gui.container.storage.ContainerSatchel");
+            Sponge.getEventManager().registerListeners(this, new ThermalExpansion());
+        } catch (ClassNotFoundException ignored) {}
         logger.info("已加载 ContainerFix，配置文件可在 /config/containerfix.conf 找到");
     }
 
@@ -74,11 +79,7 @@ public class ContainerFix {
         Sponge.getCommandManager().register(instance, core, "containerfix", "ctf");
     }
 
-    private final Map<BlockSnapshot, UUID> activeGUI = new HashMap<>();
-
-    public Map<BlockSnapshot, UUID> getActiveGUI() {
-        return activeGUI;
-    }
+    @Getter private final Map<BlockSnapshot, UUID> activeGUI = new HashMap<>();
 
     @Listener(order = Order.DEFAULT)
     public void onInvOpen(InteractInventoryEvent.Open event, @Root Player player) {
